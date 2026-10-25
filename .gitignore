@@ -1,0 +1,8 @@
+__pycache__/
+.DS_Store
+# Los datos y resultados nunca se suben
+*.csv
+*.jsonl
+*.zip
+resultados*/
+icecream_research_export*/
