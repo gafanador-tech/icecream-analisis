@@ -175,10 +175,13 @@ def h2(trials, out, label='principal', cut=None):
     df['log_md'] = np.log1p(df.max_perpendicular_deviation_px)
     df['log_auc'] = np.log1p(df.absolute_auc_px2)
     df['any_flip'] = ((df.x_reversals_4px > 0) | (df.y_reversals_4px > 0)).astype(int)
+    df['log_grab'] = np.log(df.selection_rt_ms)
     outcomes = [('log_rt', 'Tiempo de respuesta (log ms)', sm.families.Gaussian()),
                 ('log_md', 'Desviación máxima (log)', sm.families.Gaussian()),
                 ('log_auc', 'Área bajo la curva (log)', sm.families.Gaussian()),
-                ('any_flip', 'Algún cambio de dirección (sí/no)', sm.families.Binomial())]
+                ('any_flip', 'Algún cambio de dirección (sí/no)', sm.families.Binomial()),
+                # exploratory: is the decision made before the drag starts? (time from onset to grabbing the ice cream)
+                ('log_grab', 'Tiempo hasta tomar el helado (log ms, exploratorio)', sm.families.Gaussian())]
     rows = []
     for y, name, fam in outcomes:
         with warnings.catch_warnings(record=True) as w:
@@ -317,9 +320,21 @@ def rating_descriptives(d, out):
         r = d[key]
         t = r.groupby(['stimulus_type', 'stimulus_id', 'construct']).value.agg(['mean', 'std', 'count']).round(2).reset_index()
         t.to_csv(out / name, index=False)
-    proc = pd.concat([d['affective'], d['taste']])
-    log(f'Escalas: {100 * (proc.adjustment_presses > 0).mean():.1f}% con algún ajuste después del primer clic; '
-        f'{100 * proc.value_changed.astype(str).str.lower().isin(["1", "true"]).mean():.1f}% cambiaron de valor')
+    proc = pd.concat([d['affective'].assign(fase='Fase 2'), d['taste'].assign(fase='Fase 3')])
+    # Response mode: a direct click versus sliding the mark while the button is still pressed (first press).
+    slid = proc.adjustments_json.map(lambda js: any(x.get('type') == 'move' and x.get('press') == 1 for x in json.loads(js)))
+    proc = proc.assign(deslizo=slid, ajuste_posterior=proc.adjustment_presses > 0,
+                       cambio_valor=proc.value_changed.astype(str).str.lower().isin(['1', 'true']))
+    rows = []
+    for fase, g in list(proc.groupby('fase')) + [('Total', proc)]:
+        rows.append(dict(fase=fase, respuestas=len(g), pct_clic_directo=100 * (~g.deslizo).mean(), pct_deslizo=100 * g.deslizo.mean(),
+                         participantes_que_deslizaron=int(g[g.deslizo].session_id.nunique()), participantes=int(g.session_id.nunique()),
+                         pct_ajuste_despues_de_soltar=100 * g.ajuste_posterior.mean(), pct_cambio_de_valor=100 * g.cambio_valor.mean()))
+    save(pd.DataFrame(rows), out / 'T13_modo_respuesta_escalas.csv')
+    t = rows[-1]
+    log(f"Escalas: {t['pct_deslizo']:.1f}% de las respuestas se dieron deslizando la marca y {t['pct_clic_directo']:.1f}% con un clic directo; "
+        f"{t['participantes_que_deslizaron']} de {t['participantes']} participantes deslizaron al menos una vez; "
+        f"{t['pct_ajuste_despues_de_soltar']:.1f}% con algún ajuste después del primer clic; {t['pct_cambio_de_valor']:.1f}% cambiaron de valor")
 
 # ---------------------------------------------------------------- main
 def main(export, out):
