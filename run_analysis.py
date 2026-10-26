@@ -146,7 +146,9 @@ def h1(trials, ct, out=None, label='principal'):
         obs.round(1).rename('pct_emoticon_positivo').to_csv(out / 'T05b_H1_pct_positivo_por_familia.csv')
     log(f'H1b ({label}): GEE binomial, efecto de la familia: Wald χ²({dfw}) = {W:.2f}, p {fmt_p(pw)}; correlación de trabajo = {m.cov_struct.dep_params:.3f}')
     for r in rows: log(f"   {r['contraste']}: OR = {r['OR']:.3f}, 95% IC [{r['IC95_inf']:.3f}, {r['IC95_sup']:.3f}], z = {r['z']:.2f}, p {fmt_p(r['p'])}")
-    return dict(W=W, df=dfw, p=pw, contrasts=t)
+    omnibus = pd.DataFrame([dict(muestra=label, prueba='Efecto de la familia de sabor', wald_chi2=W, df=dfw, p=pw,
+                                 correlacion_trabajo=float(m.cov_struct.dep_params), ensayos=len(df), participantes=df.session_id.nunique())])
+    return dict(W=W, df=dfw, p=pw, contrasts=t, omnibus=omnibus)
 
 # ---------------------------------------------------------------- H2
 def add_agreement(trials):
@@ -348,6 +350,7 @@ def main(export, out):
     h2t_es, _, _ = h2(tr_es, out, 'sin inglés', cut=rt_cutoff(trials))
     comp_s2, coefs_s2, _ = h3_h4(a[a.session_id.isin(es)], out, 'sin inglés')
     save(h1_es['contrasts'].assign(muestra='sin inglés'), out / 'T12_sens_H1_sin_ingles.csv')
+    save(pd.concat([h1r['omnibus'], h1_es['omnibus']]), out / 'T05c_H1_GEE_prueba_global.csv')
 
     save(pd.concat([h2t, h2t_es]), out / 'T06_H2_GEE.csv')
     save(pd.concat([comp, comp_s1, comp_s2]), out / 'T08_H3H4_comparacion_modelos.csv')
