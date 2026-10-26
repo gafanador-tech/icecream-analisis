@@ -146,6 +146,13 @@ def h1(trials, ct, out=None, label='principal'):
         obs.round(1).rename('pct_emoticon_positivo').to_csv(out / 'T05b_H1_pct_positivo_por_familia.csv')
     log(f'H1b ({label}): GEE binomial, efecto de la familia: Wald χ²({dfw}) = {W:.2f}, p {fmt_p(pw)}; correlación de trabajo = {m.cov_struct.dep_params:.3f}')
     for r in rows: log(f"   {r['contraste']}: OR = {r['OR']:.3f}, 95% IC [{r['IC95_inf']:.3f}, {r['IC95_sup']:.3f}], z = {r['z']:.2f}, p {fmt_p(r['p'])}")
+    # Model-based probability of choosing a positive emoticon per family, with robust 95% CI (no-intercept GEE).
+    mp = smf.gee('positive ~ 0 + family', groups='session_id', data=df, family=sm.families.Binomial(), cov_struct=sm.cov_struct.Exchangeable()).fit()
+    ci = mp.conf_int()
+    probs = pd.DataFrame([dict(muestra=label, familia=FAMILY_ES[f], probabilidad=100 / (1 + math.exp(-mp.params[f'family[{f}]'])),
+                               IC95_inf=100 / (1 + math.exp(-ci.loc[f'family[{f}]', 0])), IC95_sup=100 / (1 + math.exp(-ci.loc[f'family[{f}]', 1])))
+                          for f in FAMILIES])
+    if out is not None: save(probs, out / 'T05d_H1_probabilidad_positivo_por_familia.csv')
     omnibus = pd.DataFrame([dict(muestra=label, prueba='Efecto de la familia de sabor', wald_chi2=W, df=dfw, p=pw,
                                  correlacion_trabajo=float(m.cov_struct.dep_params), ensayos=len(df), participantes=df.session_id.nunique())])
     return dict(W=W, df=dfw, p=pw, contrasts=t, omnibus=omnibus)
